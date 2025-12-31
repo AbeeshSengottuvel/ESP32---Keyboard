@@ -1,4 +1,4 @@
-#include <WiFi.h> 
+#include <WiFi.h>
 #include <WebServer.h>
 #include <BleKeyboard.h>
 #include <Wire.h>
@@ -6,9 +6,9 @@
 #include <Adafruit_SSD1306.h>
 
 // OLED Configuration
-#define SCREEN_WIDTH 128 
-#define SCREEN_HEIGHT 64 
-#define OLED_RESET    -1 
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+#define OLED_RESET -1
 #define SCREEN_ADDRESS 0x3C
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
@@ -23,9 +23,9 @@ const char* password = "12345678901";
 // Typing State Variables
 String textToType = "";
 int currentIndex = 0;
-bool isPaused = true; 
+bool isPaused = true;
 unsigned long lastTypeTime = 0;
-int currentDelay = 150; 
+int currentDelay = 150;
 bool lastBTState = false;
 
 // --- Helper Functions ---
@@ -39,7 +39,7 @@ int countWords(String txt, int endIdx) {
   int words = 1;
   for (int i = 0; i < endIdx; i++) {
     if (txt[i] == ' ' || txt[i] == '\n' || txt[i] == '\r') {
-      if (i > 0 && txt[i-1] != ' ' && txt[i-1] != '\n') words++;
+      if (i > 0 && txt[i - 1] != ' ' && txt[i - 1] != '\n') words++;
     }
   }
   return words;
@@ -48,8 +48,8 @@ int countWords(String txt, int endIdx) {
 void updateOLED() {
   display.clearDisplay();
   static byte frame = 0;
-  char spinner[] = {'|', '/', '-', '\\'};
-  bool blink = (millis() / 500) % 2; 
+  char spinner[] = { '|', '/', '-', '\\' };
+  bool blink = (millis() / 500) % 2;
 
   display.fillRect(0, 0, 128, 11, SSD1306_WHITE);
   display.setTextColor(SSD1306_BLACK);
@@ -60,7 +60,7 @@ void updateOLED() {
   display.setTextColor(SSD1306_WHITE);
   display.setCursor(0, 16);
   display.print("BT: ");
-  if(bleKeyboard.isConnected()) {
+  if (bleKeyboard.isConnected()) {
     display.print("[CONNECTED] ");
     display.print(spinner[frame % 4]);
   } else {
@@ -79,7 +79,7 @@ void updateOLED() {
       display.print("STATUS: DONE!");
     } else {
       display.print("STATUS: TYPING");
-      if(blink) display.print("_");
+      if (blink) display.print("_");
       frame++;
     }
 
@@ -106,6 +106,15 @@ void handleRoot() {
   int progressPercent = (textToType.length() > 0) ? (currentIndex * 100) / textToType.length() : 0;
   bool isTypingActive = (textToType.length() > 0 && currentIndex < textToType.length());
 
+  // --- Timer Calculation ---
+  int charsLeft = textToType.length() - currentIndex;
+  unsigned long totalMsLeft = (unsigned long)charsLeft * currentDelay;
+
+  int mins = totalMsLeft / 60000;
+  int secs = (totalMsLeft % 60000) / 1000;
+  int ms = totalMsLeft % 1000;
+  // -------------------------
+
   String html = "<!DOCTYPE html><html><head>";
   html += "<meta name='viewport' content='width=device-width, initial-scale=1.0'>";
   html += "<style>";
@@ -123,16 +132,17 @@ void handleRoot() {
   html += ".resume{background:#27ae60;} .reset{background:#e74c3c; grid-column: span 2;} .reboot{background:#444; grid-column: span 2; margin-top:10px; opacity:0.7;} ";
   html += "input[type=number]{background:#2c2c2c; border:1px solid #444; color:white; padding:5px; border-radius:5px; width:50px;} ";
   html += "</style>";
-  
+
   if (!isPaused && isTypingActive) html += "<meta http-equiv='refresh' content='2'>";
-  
+
   html += "</head><body>";
   html += "<h2>Pro Keyboard</h2>";
   html += "<div class='container'>";
-  
-  // Status Bar
+
+  // Updated Status Bar with Timer
   html += "<div class='stats'>";
   html += "<div><b>Words</b><br>" + String(wordsTyped) + "/" + String(totalWords) + "</div>";
+  html += "<div><b>Remaining</b><br>" + String(mins) + ":" + (secs < 10 ? "0" : "") + String(secs) + ":" + String(ms) + "</div>";
   html += "<div><b>Chars</b><br>" + String(currentIndex) + "/" + String(textToType.length()) + "</div>";
   html += "</div>";
 
@@ -153,22 +163,39 @@ void handleRoot() {
   html += "<button onclick=\"location.href='/end'\" class='btn reset'>CLEAR & RESET</button>";
   html += "<button onclick=\"if(confirm('Reboot ESP32?')) location.href='/reboot'\" class='btn reboot'>HARD REBOOT</button>";
   html += "</div>";
-  
+
   html += "</div></body></html>";
-  
+
   server.send(200, "text/html", html);
 }
 
 void handleType() {
-  if (server.hasArg("msg")) { textToType = server.arg("msg"); currentIndex = 0; isPaused = false; }
+  if (server.hasArg("msg")) {
+    textToType = server.arg("msg");
+    currentIndex = 0;
+    isPaused = false;
+  }
   if (server.hasArg("speed")) currentDelay = server.arg("speed").toInt();
   server.sendHeader("Location", "/");
   server.send(303);
 }
 
-void handleEnd() { isPaused = true; currentIndex = 0; server.sendHeader("Location", "/"); server.send(303); }
-void handlePause() { isPaused = true; server.sendHeader("Location", "/"); server.send(303); }
-void handleResume() { isPaused = false; server.sendHeader("Location", "/"); server.send(303); }
+void handleEnd() {
+  isPaused = true;
+  currentIndex = 0;
+  server.sendHeader("Location", "/");
+  server.send(303);
+}
+void handlePause() {
+  isPaused = true;
+  server.sendHeader("Location", "/");
+  server.send(303);
+}
+void handleResume() {
+  isPaused = false;
+  server.sendHeader("Location", "/");
+  server.send(303);
+}
 
 // New Hard Reboot Handler
 void handleReboot() {
@@ -180,13 +207,14 @@ void handleReboot() {
 void setup() {
   Serial.begin(115200);
 
-  if(!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
+  if (!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
     Serial.println("SSD1306 failed");
-    for(;;);
+    for (;;)
+      ;
   }
-  
+
   WiFi.begin(ssid, password);
-  
+
   int progress = 0;
   while (WiFi.status() != WL_CONNECTED) {
     display.clearDisplay();
@@ -206,13 +234,13 @@ void setup() {
   }
 
   bleKeyboard.begin();
-  
+
   server.on("/", HTTP_GET, handleRoot);
   server.on("/type", HTTP_POST, handleType);
   server.on("/pause", HTTP_GET, handlePause);
   server.on("/resume", HTTP_GET, handleResume);
   server.on("/end", HTTP_GET, handleEnd);
-  server.on("/reboot", HTTP_GET, handleReboot); // Register reboot route
+  server.on("/reboot", HTTP_GET, handleReboot);  // Register reboot route
   server.begin();
 
   updateOLED();
@@ -237,17 +265,14 @@ void loop() {
         bleKeyboard.press(KEY_RETURN);
         delay(50);
         bleKeyboard.releaseAll();
-        
-        if (currentIndex + 1 < textToType.length() &&
-            ((textToType[currentIndex] == '\n' && textToType[currentIndex + 1] == '\r') ||
-             (textToType[currentIndex] == '\r' && textToType[currentIndex + 1] == '\n'))) {
+
+        if (currentIndex + 1 < textToType.length() && ((textToType[currentIndex] == '\n' && textToType[currentIndex + 1] == '\r') || (textToType[currentIndex] == '\r' && textToType[currentIndex + 1] == '\n'))) {
           currentIndex++;
         }
       } else {
         // --- FIX PORTION START ---
         if (isSpecialChar(c)) {
-          bleKeyboard.write(c); 
-          delay(10); // Small buffer to let the mobile OS process the symbol
+          bleKeyboard.write(c);
         } else {
           bleKeyboard.print(c);
         }
