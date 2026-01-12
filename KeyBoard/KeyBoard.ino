@@ -142,7 +142,15 @@ const char MAIN_PAGE[] PROGMEM = R"raw(
 
         document.addEventListener('DOMContentLoaded', function() {
             setInterval(fetchStatus, 2000);
+            fetchStatus(); // Initial fetch
         });
+
+        function formatTime(seconds) {
+            const h = Math.floor(seconds / 3600).toString().padStart(2, '0');
+            const m = Math.floor((seconds % 3600) / 60).toString().padStart(2, '0');
+            const s = Math.floor(seconds % 60).toString().padStart(2, '0');
+            return `${h}:${m}:${s}`;
+        }
 
         async function fetchStatus() {
             try {
@@ -157,10 +165,31 @@ const char MAIN_PAGE[] PROGMEM = R"raw(
                 statusDot.className = 'status-dot ' + (data.status === 'typing' ? 'typing' : 'idle');
                 statusText.textContent = data.status.toUpperCase();
                 
+                // State Restoration Logic
+                const textInput = document.getElementById('textInput');
+                const hasActiveJob = (data.total > 0 && data.current < data.total);
+                
+                if (hasActiveJob && textInput.value.length === 0) {
+                     try {
+                         const txtRes = await fetch('/get_text');
+                         if(txtRes.ok) {
+                             textInput.value = await txtRes.text();
+                             document.getElementById('charCount').textContent = textInput.value.length;
+                             if(data.speed) {
+                                 document.getElementById('speedInput').value = data.speed;
+                                 appState.speed = data.speed;
+                             }
+                         }
+                     } catch(e) { console.error("Failed to restore text", e); }
+                }
+
                 // Update Button State
                 if (data.status === 'typing') {
                     btn.disabled = true;
                     btn.textContent = 'Typing...';
+                } else if (data.status === 'paused') {
+                    btn.disabled = false; // Allow restart if needed, otherwise handled by Pause/Resume
+                    btn.textContent = 'Start Typing'; 
                 } else {
                     btn.disabled = false;
                     btn.textContent = 'Start Typing';
@@ -176,11 +205,24 @@ const char MAIN_PAGE[] PROGMEM = R"raw(
                 btEl.style.color = data.bt ? '#10b981' : '#ef4444';
 
                 // Uptime
-                const uptimeSec = Math.floor(data.uptime / 1000);
-                const h = Math.floor(uptimeSec / 3600).toString().padStart(2, '0');
-                const m = Math.floor((uptimeSec % 3600) / 60).toString().padStart(2, '0');
-                const s = (uptimeSec % 60).toString().padStart(2, '0');
-                document.getElementById('uptimeVal').textContent = `${h}:${m}:${s}`;
+                document.getElementById('uptimeVal').textContent = formatTime(Math.floor(data.uptime / 1000));
+                
+                // Timer Logic
+                const durationLabel = document.getElementById('durationDisplay').previousElementSibling;
+                if (hasActiveJob) {
+                    durationLabel.textContent = "REMAINING TIME";
+                    const remainingChars = data.total - data.current;
+                    const speed = data.speed || parseInt(document.getElementById('speedInput').value) || 150;
+                    const ms = remainingChars * speed;
+                    document.getElementById('durationDisplay').textContent = formatTime(Math.floor(ms / 1000));
+                } else if (textInput.value.length > 0) {
+                     // Fallback to calculation if job finished or idle but text exists
+                     durationLabel.textContent = "ESTIMATED DURATION";
+                     updateCalculations();
+                } else {
+                     durationLabel.textContent = "ESTIMATED DURATION";
+                     document.getElementById('durationDisplay').textContent = "00:00:00";
+                }
                 
             } catch (error) {
                 console.error('Connection Lost', error);
@@ -197,6 +239,7 @@ const char MAIN_PAGE[] PROGMEM = R"raw(
                     options.body = formData;
                 }
                 await fetch(endpoint, options);
+                setTimeout(fetchStatus, 500); // Trigger immediate update
             } catch (e) {
                 console.error(e);
             }
@@ -217,42 +260,27 @@ const char MAIN_PAGE[] PROGMEM = R"raw(
         }
 
         function togglePause() {
-             // We'll just toggle blindly, status poll will correct UI
-             apiCall('/pause'); // Note: Endpoint logic should handle toggle or separate resume
-             // But for now let's assume /pause toggles or we use /resume. 
-             // To be safe, let's just hit pause if running. 
-             // Ideally we need state to know if we should resume.
-             // For simplicity in this edit:
-             // We'll hit pause. If user clicks again, we probably need a resume button or smart logic.
-             // Let's make the button smart based on visual state if possible, or just have separate endpoints.
-             // The user asked for "Pause / Resume" button.
-             // Let's check current text.
              const btn = document.getElementById('pauseBtn');
-             if (btn.textContent.includes('Resume')) {
+             // Simple toggle logic, actual state handled by poll
+             if (document.getElementById('statusText').textContent === 'PAUSED') {
                  apiCall('/resume');
-                 btn.textContent = 'Pause / Resume'; 
              } else {
                  apiCall('/pause');
-                 // We don't change text immediately, let status poll update it? 
-                 // Actually the status endpoint returns "paused" or "typing".
              }
         }
         
         function rebootDevice() { apiCall('/reboot'); }
 
         function updateCalculations() {
+            // Only update if we are not actively typing based on last known state (approx)
+            // But fetchStatus will override anyway. This is for immediate feedback while editing.
             const text = document.getElementById('textInput').value;
             const speed = parseInt(document.getElementById('speedInput').value) || 150;
             
             document.getElementById('charCount').textContent = text.length;
 
             const totalMs = text.length * speed;
-            const totalSeconds = Math.floor(totalMs / 1000);
-            const  h = Math.floor(totalSeconds / 3600).toString().padStart(2, '0');
-            const m = Math.floor((totalSeconds % 3600) / 60).toString().padStart(2, '0');
-            const s = (totalSeconds % 60).toString().padStart(2, '0');
-            
-            document.getElementById('durationDisplay').textContent = `${h}:${m}:${s}`;
+            document.getElementById('durationDisplay').textContent = formatTime(Math.floor(totalMs / 1000));
         }
     </script>
 </body>
@@ -360,7 +388,11 @@ void handleRoot() {
 }
 
 void handleStatus() {
-  String status = (!isPaused && textToType.length() > 0 && currentIndex < textToType.length()) ? "typing" : "idle";
+  String status = "idle";
+  if (textToType.length() > 0 && currentIndex < textToType.length()) {
+    status = isPaused ? "paused" : "typing";
+  }
+  
   int progress = (textToType.length() > 0) ? (currentIndex * 100) / textToType.length() : 0;
   
   String json = "{";
@@ -369,10 +401,17 @@ void handleStatus() {
   json += "\"rssi\":" + String(WiFi.RSSI()) + ",";
   json += "\"heap\":" + String(ESP.getFreeHeap()) + ",";
   json += "\"uptime\":" + String(millis()) + ",";
-  json += "\"bt\":" + String(bleKeyboard.isConnected() ? "true" : "false");
+  json += "\"bt\":" + String(bleKeyboard.isConnected() ? "true" : "false") + ",";
+  json += "\"total\":" + String(textToType.length()) + ",";
+  json += "\"current\":" + String(currentIndex) + ",";
+  json += "\"speed\":" + String(currentDelay);
   json += "}";
   
   server.send(200, "application/json", json);
+}
+
+void handleGetText() {
+  server.send(200, "text/plain", textToType);
 }
 
 void handleType() {
@@ -520,6 +559,7 @@ void setup() {
   server.on("/macro", HTTP_GET, handleMacro);
   server.on("/media", HTTP_GET, handleMedia);
   server.on("/quick", HTTP_GET, handleQuick);
+  server.on("/get_text", HTTP_GET, handleGetText);
   server.begin();
 
   updateOLED();
