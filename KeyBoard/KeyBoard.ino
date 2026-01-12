@@ -110,61 +110,112 @@ void handleRoot() {
   int charsLeft = textToType.length() - currentIndex;
   unsigned long totalMsLeft = (unsigned long)charsLeft * currentDelay;
 
-  int mins = totalMsLeft / 60000;
-  int secs = (totalMsLeft % 60000) / 1000;
-  int ms = totalMsLeft % 1000;
-  // -------------------------
+  String html = R"raw(
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+  <title>Neural Link v2.0</title>
+  <style>
+    :root { --bg: #121212; --panel: #1e1e1e; --primary: #00f3ff; --accent: #bd00ff; --text: #e0e0e0; }
+    body { font-family: 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); padding: 0; margin: 0; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
+    h2 { color: var(--primary); text-transform: uppercase; letter-spacing: 2px; text-shadow: 0 0 10px rgba(0, 243, 255, 0.5); margin: 20px 0; }
+    .container { width: 90%; max-width: 450px; padding-bottom: 50px; }
+    
+    /* INPUT ZONE */
+    textarea { width: 100%; height: 100px; background: #0a0a0a; border: 1px solid #333; color: var(--primary); padding: 10px; border-radius: 8px; font-family: 'Consolas', monospace; resize: none; margin-bottom: 10px; box-shadow: inset 0 0 10px rgba(0,0,0,0.5); }
+    textarea:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 15px rgba(0, 243, 255, 0.2); }
+    
+    /* STATS */
+    .status-bar { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 15px; color: #888; }
+    .status-item span { color: var(--primary); font-weight: bold; }
+    
+    /* CONTROLS */
+    .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 20px; }
+    .btn { background: var(--panel); border: 1px solid #333; color: #fff; padding: 15px 5px; border-radius: 10px; font-size: 12px; cursor: pointer; transition: 0.2s; display: flex; flex-direction: column; align-items: center; justify-content: center; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+    .btn i { font-size: 20px; margin-bottom: 5px; } 
+    .btn:active { transform: scale(0.95); box-shadow: 0 0 10px var(--primary); border-color: var(--primary); }
+    .btn.media { border-color: rgba(189, 0, 255, 0.3); }
+    .btn.macro { border-color: rgba(0, 243, 255, 0.3); }
+    .btn.start { background: linear-gradient(135deg, #005c97, #363795); grid-column: span 3; font-size: 16px; font-weight: bold; padding: 15px; letter-spacing: 1px; }
+    
+    /* PROGRESS */
+    .progress-box { background: #333; height: 6px; border-radius: 3px; margin: 10px 0; overflow: hidden; }
+    .bar { background: var(--primary); height: 100%; width: 0%; transition: width 0.5s; box-shadow: 0 0 10px var(--primary); }
+  </style>
+  <script>
+    function hit(url) { fetch(url); }
+  </script>
+</head>
+<body>
+  <h2>Neural Link_v2.0</h2>
+  <div class='container'>
+)raw";
 
-  String html = "<!DOCTYPE html><html><head>";
-  html += "<meta name='viewport' content='width=device-width, initial-scale=1.0'>";
-  html += "<style>";
-  html += "body{font-family:-apple-system,sans-serif; background:#121212; color:#e0e0e0; text-align:center; padding:15px; margin:0;} ";
-  html += "h2{color:#007bff; margin-bottom:10px;} ";
-  html += ".container{max-width:400px; margin:auto; background:#1e1e1e; padding:20px; border-radius:15px; box-shadow:0 10px 30px rgba(0,0,0,0.5);} ";
-  html += "textarea{width:100%; height:120px; padding:12px; box-sizing:border-box; border-radius:10px; border:1px solid #333; background:#2c2c2c; color:white; font-size:16px; margin-bottom:15px; resize:none;} ";
-  html += ".stats{display:flex; justify-content:space-around; background:#2c2c2c; padding:10px; border-radius:10px; margin-bottom:15px; font-size:14px;} ";
-  html += ".progress-container{background:#333; border-radius:10px; height:10px; margin-bottom:20px; overflow:hidden;} ";
-  html += ".progress-bar{background:#007bff; width:" + String(progressPercent) + "%; height:100%; transition:width 0.3s;} ";
-  html += ".grid{display:grid; grid-template-columns: 1fr 1fr; gap:10px;} ";
-  html += ".btn{padding:12px; border:none; border-radius:8px; font-size:14px; font-weight:bold; cursor:pointer; color:white; transition:0.2s;} ";
-  html += ".btn:active{transform:scale(0.96);} ";
-  html += ".start{background:#007bff; grid-column: span 2;} .pause{background:#f39c12; color:white;} ";
-  html += ".resume{background:#27ae60;} .reset{background:#e74c3c; grid-column: span 2;} .reboot{background:#444; grid-column: span 2; margin-top:10px; opacity:0.7;} ";
-  html += "input[type=number]{background:#2c2c2c; border:1px solid #444; color:white; padding:5px; border-radius:5px; width:50px;} ";
-  html += "</style>";
-
+  // Dynamic CSS injection for progress bar
+  html += "<style>.bar { width: " + String(progressPercent) + "%; }</style>";
+  
   if (!isPaused && isTypingActive) html += "<meta http-equiv='refresh' content='2'>";
 
-  html += "</head><body>";
-  html += "<h2>Pro Keyboard</h2>";
-  html += "<div class='container'>";
+  html += R"raw(
+    <div class='status-bar'>
+      <div class='status-item'>STATUS: <span>)raw";
+  
+  html += (isPaused ? "STANDBY" : "TRANSMITTING...");
+  
+  html += R"raw(</span></div>
+      <div class='status-item'>WORDS: <span>)raw" + String(wordsTyped) + R"raw(</span></div>
+    </div>
+    
+    <div class='progress-box'><div class='bar'></div></div>
 
-  // Updated Status Bar with Timer
-  html += "<div class='stats'>";
-  html += "<div><b>Words</b><br>" + String(wordsTyped) + "/" + String(totalWords) + "</div>";
-  html += "<div><b>Remaining</b><br>" + String(mins) + ":" + (secs < 10 ? "0" : "") + String(secs) + ":" + String(ms) + "</div>";
-  html += "<div><b>Chars</b><br>" + String(currentIndex) + "/" + String(textToType.length()) + "</div>";
-  html += "</div>";
+    <form action='/type' method='POST'>
+      <textarea name='msg' placeholder='// Enter Command Stream...'>)raw" + textToType + R"raw(</textarea>
+      
+      <div style='display:flex; justify-content:space-between; margin-bottom:15px; align-items:center;'>
+        <span style='font-size:12px; color:#666;'>DELAY (ms):</span>
+        <input type='number' name='speed' value=')raw" + String(currentDelay) + R"raw(' style='background:#222; border:none; color:white; padding:5px; width:50px; text-align:center;'>
+      </div>
 
-  // Web Progress Bar
-  html += "<div class='progress-container'><div class='progress-bar'></div></div>";
+      <button type='submit' class='btn start'>INITIATE UPLOAD</button>
+    </form>
 
-  // Input Form
-  html += "<form action='/type' method='POST'>";
-  html += "<textarea name='msg' placeholder='Paste text here...'>" + textToType + "</textarea>";
-  html += "<p style='font-size:13px;'>Delay: <input type='number' name='speed' value='" + String(currentDelay) + "'> ms</p>";
-  html += "<button type='submit' class='btn start' " + String(isTypingActive ? "disabled" : "") + ">BEGIN TYPING</button>";
-  html += "</form>";
+    <div style='text-align:left; color:#666; font-size:10px; margin-top:20px; margin-bottom:5px;'>MEDIA DECK</div>
+    <div class='grid'>
+      <button class='btn media' onclick="hit('/media?cmd=prev')">|&lt;</button>
+      <button class='btn media' onclick="hit('/media?cmd=play')">PLAY</button>
+      <button class='btn media' onclick="hit('/media?cmd=next')">&gt;|</button>
+      <button class='btn media' onclick="hit('/media?cmd=voldown')">VOL -</button>
+      <button class='btn media' onclick="hit('/media?cmd=mute')">MUTE</button>
+      <button class='btn media' onclick="hit('/media?cmd=volup')">VOL +</button>
+    </div>
 
-  // Control Grid
-  html += "<div class='grid' style='margin-top:15px;'>";
-  html += "<button onclick=\"location.href='/pause'\" class='btn pause'>PAUSE</button>";
-  html += "<button onclick=\"location.href='/resume'\" class='btn resume'>RESUME</button>";
-  html += "<button onclick=\"location.href='/end'\" class='btn reset'>CLEAR & RESET</button>";
-  html += "<button onclick=\"if(confirm('Reboot ESP32?')) location.href='/reboot'\" class='btn reboot'>HARD REBOOT</button>";
-  html += "</div>";
+    <div style='text-align:left; color:#666; font-size:10px; margin-bottom:5px;'>MACRO MATRIX</div>
+    <div class='grid'>
+      <button class='btn macro' onclick="hit('/macro?cmd=copy')">COPY</button>
+      <button class='btn macro' onclick="hit('/macro?cmd=paste')">PASTE</button>
+      <button class='btn macro' onclick="hit('/macro?cmd=tab')">TAB</button>
+      <button class='btn macro' onclick="hit('/macro?cmd=lock')">LOCK</button>
+      <button class='btn macro' onclick="hit('/macro?cmd=desktop')">DESKTOP</button>
+      <button class='btn macro' onclick="location.href='/end'" style='border-color: #ff0055; color:#ff0055;'>ABORT</button>
+    </div>
+    
+    <div style='text-align:left; color:#666; font-size:10px; margin-bottom:5px;'>QUICK SLOTS</div>
+    <div class='grid'>
+       <button class='btn' onclick="hit('/quick?msg=Hello World')">M1</button>
+       <button class='btn' onclick="hit('/quick?msg=git status')">M2</button>
+       <button class='btn' onclick="hit('/quick?msg=npm run dev')">M3</button>
+       <button class='btn' onclick="if(confirm('Reboot?')) location.href='/reboot'">RST</button>
+       <button class='btn' onclick="location.href='/pause'" style='color:#f39c12'>PAUSE</button>
+    </div>
 
-  html += "</div></body></html>";
+    <div style='margin-top:20px; font-size:10px; color:#444;'>
+      SYSTEM_ID: ESP32_C3 | BATTERY: N/A
+    </div>
+  </div>
+</body>
+</html>
+)raw";
 
   server.send(200, "text/html", html);
 }
@@ -204,6 +255,73 @@ void handleReboot() {
   ESP.restart();
 }
 
+// --- NEW FEATURE HANDLERS (Cyberpunk Update) ---
+
+void handleMacro() {
+  if (server.hasArg("cmd")) {
+    String cmd = server.arg("cmd");
+    if (cmd == "lock") {
+      bleKeyboard.press(KEY_LEFT_GUI);
+      bleKeyboard.press('l');
+      delay(100);
+      bleKeyboard.releaseAll();
+    } else if (cmd == "desktop") {
+      bleKeyboard.press(KEY_LEFT_GUI);
+      bleKeyboard.press('d');
+      delay(100);
+      bleKeyboard.releaseAll();
+    } else if (cmd == "tab") {
+      bleKeyboard.press(KEY_LEFT_ALT);
+      bleKeyboard.press(KEY_TAB);
+      delay(100);
+      bleKeyboard.releaseAll();
+    } else if (cmd == "copy") {
+      bleKeyboard.press(KEY_LEFT_CTRL);
+      bleKeyboard.press('c');
+      delay(100);
+      bleKeyboard.releaseAll();
+    } else if (cmd == "paste") {
+      bleKeyboard.press(KEY_LEFT_CTRL);
+      bleKeyboard.press('v');
+      delay(100);
+      bleKeyboard.releaseAll();
+    }
+  }
+  server.send(204); // No Content (keeps user on same page)
+}
+
+void handleMedia() {
+  if (server.hasArg("cmd")) {
+    String cmd = server.arg("cmd");
+    if (cmd == "play") bleKeyboard.write(KEY_MEDIA_PLAY_PAUSE);
+    else if (cmd == "volup") bleKeyboard.write(KEY_MEDIA_VOLUME_UP);
+    else if (cmd == "voldown") bleKeyboard.write(KEY_MEDIA_VOLUME_DOWN);
+    else if (cmd == "mute") bleKeyboard.write(KEY_MEDIA_MUTE);
+    else if (cmd == "next") bleKeyboard.write(KEY_MEDIA_NEXT_TRACK);
+    else if (cmd == "prev") bleKeyboard.write(KEY_MEDIA_PREVIOUS_TRACK);
+  }
+  server.send(204);
+}
+
+// Quick Slots (M1-M5)
+void handleQuick() {
+  if (server.hasArg("msg")) {
+    // We inject this directly into the typing queue logic or just print it immediately?
+    // User asked NOT to change typing logic.
+    // Safest way involves appending to textToType OR just blocking print if queue is empty.
+    // Let's do direct print for "Instant" feel, assuming queue is empty.
+    // If typing is active, we might want to wait. 
+    // For now, let's just append to the current text buffer to adhere to "don't change typing code" 
+    // and let the existing loop handle it!
+    String msg = server.arg("msg");
+    if(msg.length() > 0) {
+        textToType += msg; 
+        isPaused = false; // Auto-start typing
+    }
+  }
+  server.send(204);
+}
+
 void setup() {
   Serial.begin(115200);
 
@@ -240,7 +358,12 @@ void setup() {
   server.on("/pause", HTTP_GET, handlePause);
   server.on("/resume", HTTP_GET, handleResume);
   server.on("/end", HTTP_GET, handleEnd);
-  server.on("/reboot", HTTP_GET, handleReboot);  // Register reboot route
+  server.on("/reboot", HTTP_GET, handleReboot);
+  
+  // New Routes
+  server.on("/macro", HTTP_GET, handleMacro);
+  server.on("/media", HTTP_GET, handleMedia);
+  server.on("/quick", HTTP_GET, handleQuick);
   server.begin();
 
   updateOLED();
