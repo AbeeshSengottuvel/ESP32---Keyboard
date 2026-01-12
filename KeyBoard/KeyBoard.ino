@@ -55,7 +55,14 @@ const char MAIN_PAGE[] PROGMEM = R"raw(
         .stat-val { color: #f9f9fa; font-weight: 600; margin-left: 0.25rem; }
 
         /* Timer */
+        /* Timer */
         .timer-display { font-family: monospace; font-size: 1.5rem; font-weight: 700; color: #3b82f6; text-align: center; margin-top: 0.5rem; }
+
+        /* Progress Bar */
+        .progress-wrapper { width: 200px; height: 1.25rem; background: #2d2e33; border-radius: 0.25rem; overflow: hidden; position: relative; display: none; }
+        .progress-bar { height: 100%; background: linear-gradient(45deg, #10b981 25%, #059669 25%, #059669 50%, #10b981 50%, #10b981 75%, #059669 75%, #059669); background-size: 1rem 1rem; animation: stripemove 1s linear infinite; transition: width 0.3s ease; width: 0%; }
+        .progress-text { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 700; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.5); }
+        @keyframes stripemove { from { background-position: 0 0; } to { background-position: 1rem 1rem; } }
     </style>
 </head>
 <body>
@@ -99,7 +106,13 @@ const char MAIN_PAGE[] PROGMEM = R"raw(
         <div class="flex-container">
             <!-- Text Input -->
             <div class="card flex-full">
-                <div class="card-header">Text Input</div>
+                <div class="card-header">
+                    <span>Text Input</span>
+                    <div class="progress-wrapper" id="progWrapper">
+                        <div class="progress-bar" id="progBar"></div>
+                        <div class="progress-text" id="progText">0% Left</div>
+                    </div>
+                </div>
                 <div class="card-body">
                     <textarea id="textInput" placeholder="Enter text here..." oninput="updateCalculations()"></textarea>
                     <div class="flex-between" style="margin-top: 1rem;">
@@ -209,19 +222,33 @@ const char MAIN_PAGE[] PROGMEM = R"raw(
                 
                 // Timer Logic
                 const durationLabel = document.getElementById('durationDisplay').previousElementSibling;
+                const progWrapper = document.getElementById('progWrapper');
+                const progBar = document.getElementById('progBar');
+                const progText = document.getElementById('progText');
+
                 if (hasActiveJob) {
                     durationLabel.textContent = "REMAINING TIME";
                     const remainingChars = data.total - data.current;
                     const speed = data.speed || parseInt(document.getElementById('speedInput').value) || 150;
                     const ms = remainingChars * speed;
                     document.getElementById('durationDisplay').textContent = formatTime(Math.floor(ms / 1000));
+                    
+                    // Progress Bar Logic
+                    progWrapper.style.display = 'block';
+                    const pctDone = (data.current / data.total) * 100;
+                    const pctLeft = 100 - pctDone;
+                    progBar.style.width = pctDone + '%';
+                    progText.textContent = Math.round(pctLeft) + '% Left';
+
                 } else if (textInput.value.length > 0) {
                      // Fallback to calculation if job finished or idle but text exists
                      durationLabel.textContent = "ESTIMATED DURATION";
                      updateCalculations();
+                     progWrapper.style.display = 'none';
                 } else {
                      durationLabel.textContent = "ESTIMATED DURATION";
                      document.getElementById('durationDisplay').textContent = "00:00:00";
+                     progWrapper.style.display = 'none';
                 }
                 
             } catch (error) {
